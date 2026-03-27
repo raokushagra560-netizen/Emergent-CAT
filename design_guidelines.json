@@ -1,0 +1,95 @@
+{
+  "theme": "light_and_dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast)",
+  "reasoning": "Test Prep and Reading Comprehension requires extreme focus, authority, and clarity. A high-contrast, Swiss editorial design mimics traditional high-quality exam interfaces while remaining modern and distraction-free. The combination of classic serif typography for reading material and sterile sans/mono for the UI creates a highly authoritative 'Old Money Tech' aesthetic.",
+  "colors": {
+    "light": {
+      "background": "#FFFFFF",
+      "surface": "#FAFAFA",
+      "text_primary": "#09090B",
+      "text_secondary": "#52525B",
+      "border": "#E4E4E7",
+      "primary_accent": "#002FA7",
+      "primary_accent_hover": "#002482",
+      "danger": "#FF2A00",
+      "success": "#00A36C"
+    },
+    "dark": {
+      "background": "#09090B",
+      "surface": "#18181B",
+      "text_primary": "#FAFAFA",
+      "text_secondary": "#A1A1AA",
+      "border": "#27272A",
+      "primary_accent": "#002FA7",
+      "primary_accent_hover": "#003BD6",
+      "danger": "#FF4524",
+      "success": "#00C281"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Cormorant Garamond",
+      "body": "IBM Plex Sans",
+      "mono": "IBM Plex Mono"
+    },
+    "scale": {
+      "h1": "text-5xl md:text-6xl tracking-tighter leading-tight font-medium font-serif",
+      "h2": "text-3xl md:text-4xl tracking-tight leading-snug font-medium font-serif",
+      "h3": "text-xl md:text-2xl font-semibold font-sans",
+      "h4": "text-lg md:text-xl font-medium font-sans",
+      "body_reading": "text-lg md:text-xl leading-loose text-zinc-800 dark:text-zinc-200 font-serif",
+      "body_ui": "text-base leading-normal font-sans",
+      "small_label": "text-xs uppercase tracking-[0.2em] font-medium font-mono text-zinc-500"
+    }
+  },
+  "layout": {
+    "general_spacing": "p-8 md:p-12",
+    "reading_container": "max-w-3xl mx-auto px-6 py-12 md:py-20",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "bento_marketing_grid": "grid grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-8"
+  },
+  "surface_strategies": {
+    "reading_pane": "Solid background, no shadow, subtle 1px border. Focus entirely on typography.",
+    "dashboard_cards": "Flat background matching surface color, 1px border (border-zinc-200 dark:border-zinc-800), no shadow. Dense and compact.",
+    "header": "Crystal Glassmorphism: backdrop-blur-xl bg-white/70 dark:bg-black/60, border-b border-zinc-200/50 dark:border-zinc-800/50.",
+    "flashcards": "Neumorphic tactile variants with sharp 1px border. Two-sided with Framer Motion flip.",
+    "timer_widget": "Grid Borders (Technical look). Exposed skeleton, mono typography."
+  },
+  "components": {
+    "buttons": "Square or very slightly rounded (rounded-sm). Primary uses #002FA7. text-white ALWAYS. High contrast hover states.",
+    "timer": "Retro-Futurism style. Monospace font. Red (#FF2A00) when running out of time.",
+    "vocabulary_popover": "Shadcn Popover. High contrast background (dark on light theme, light on dark theme) to instantly draw attention to the meaning.",
+    "article_settings": "Sticky right sidebar or slide-out sheet (Shadcn Sheet). Dense, compact toggles and sliders.",
+    "data_display": "Shadcn Charts and Progress bars. Use primary accent and monochrome scales."
+  },
+  "motion": {
+    "flashcard_flip": "Framer motion 3D rotation on Y axis.",
+    "reading_progress": "Smooth width transition on sticky top progress bar.",
+    "vocabulary_highlight": "Subtle yellow or blue background tint transition on hover/click of difficult words."
+  },
+  "icons": "@phosphor-icons/react (Duotone for marketing, Regular/Bold for UI)",
+  "media": {
+    "hero_landing": {
+      "url": "https://images.unsplash.com/photo-1595494702547-a45e577e2764",
+      "description": "Student intensely focused on reading in a dark library, serving as the landing page hero background image."
+    },
+    "dashboard_background_accent": {
+      "url": "https://images.pexels.com/photos/3137079/pexels-photo-3137079.jpeg",
+      "description": "Abstract angled white lines on black background, used as subtle opacity mask for dashboard headers or dark mode backgrounds."
+    },
+    "feature_reading_typography": {
+      "url": "https://images.unsplash.com/photo-1716892001565-09a2d461982f",
+      "description": "Clean modern typography book layout, used in the landing page bento grid for the 'Quality Articles' feature."
+    }
+  },
+  "specific_instructions_for_main_agent": [
+    "Install and use '@phosphor-icons/react'.",
+    "Use Shadcn UI for all forms, popovers, and dialogs. Strip away heavy shadows and rounded corners; default to 'rounded-sm' or 'rounded-none'.",
+    "The Reading Assessment interface must be pristine. Use 'Cormorant Garamond' for the article text, 'IBM Plex Sans' for questions and UI.",
+    "Implement the timer as a sticky, hideable element. Use monospace font for the digits.",
+    "For the Vocabulary builder, wrap complex words in a span with an onClick handler that triggers a Shadcn Popover containing the definition, example, and a 'Bookmark for Flashcard' button.",
+    "For dark mode, DO NOT use pure black backgrounds. Use the zinc scale (zinc-950 for background, zinc-900 for surface).",
+    "All interactive elements MUST have a data-testid attribute in kebab-case (e.g., 'start-assessment-btn', 'timer-toggle', 'vocab-word-[word]').",
+    "The post-reading Q&A should feel like an integrated part of the flow, not a disruptive modal. Use a smooth scroll or slide-in."
+  ]
+}
