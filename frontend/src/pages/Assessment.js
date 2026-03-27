@@ -55,8 +55,10 @@ export default function Assessment() {
       setPhase('reading');
       setReadingStartTime(Date.now());
       setElapsed(0);
-    } catch {
-      toast.error('Failed to generate article. Please try again.');
+    } catch (err) {
+      const detail = err?.response?.data?.detail || '';
+      if (detail.includes('budget')) toast.error(detail);
+      else toast.error('Failed to generate article. Please try again.');
     } finally {
       setLoading(false);
     }

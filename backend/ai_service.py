@@ -86,11 +86,18 @@ Style inspiration: Aeon essays, JSTOR articles, NatGeo History, LA Review of Boo
 Return ONLY valid JSON (no markdown fences):
 {{"title":"article title","content":"full article text with paragraphs separated by double newlines","word_count":{word_limit},"genre":"{genre}","difficulty":{difficulty},"tone":"{tone}","structure_used":"{structure}","correct_what":"2-3 sentence summary of what article is about","correct_why":"2-3 sentence explanation of author purpose","correct_structure":"paragraph-by-paragraph breakdown like Para 1: Introduction... Para 2: Evidence...","difficult_words":["word1","word2","word3","word4","word5","word6"]}}"""
 
-    response = await chat.send_message(UserMessage(text=prompt))
+    try:
+        response = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        error_msg = str(e)
+        if "budget" in error_msg.lower() or "exceeded" in error_msg.lower() or "cost" in error_msg.lower():
+            return {"error": "AI budget exceeded. Please go to Profile > Universal Key > Add Balance to continue.", "budget_error": True}
+        return {"error": f"AI service error: {error_msg[:200]}"}
+
     try:
         return _parse_json_response(response)
     except json.JSONDecodeError:
-        return {"error": "Failed to generate article", "raw": response[:300]}
+        return {"error": "Failed to parse article response", "raw": response[:300]}
 
 
 async def evaluate_answers(article_content, correct_what, correct_why, correct_structure,
@@ -128,7 +135,14 @@ Scoring criteria:
 Return ONLY valid JSON:
 {{"reading_speed_score":0,"what_score":0,"why_score":0,"structure_score":0,"total_score":0,"reading_speed_feedback":"brief","what_feedback":"brief","why_feedback":"brief","structure_feedback":"brief","overall_feedback":"2-3 sentence assessment","recommended_difficulty":3}}"""
 
-    response = await chat.send_message(UserMessage(text=prompt))
+    try:
+        response = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        error_msg = str(e)
+        if "budget" in error_msg.lower() or "exceeded" in error_msg.lower():
+            raise Exception("AI budget exceeded. Please go to Profile > Universal Key > Add Balance.")
+        raise
+
     try:
         return _parse_json_response(response)
     except json.JSONDecodeError:
@@ -161,7 +175,14 @@ Return ONLY valid JSON:
 
 Provide entries for ALL listed words."""
 
-    response = await chat.send_message(UserMessage(text=prompt))
+    try:
+        response = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        error_msg = str(e)
+        if "budget" in error_msg.lower() or "exceeded" in error_msg.lower():
+            raise Exception("AI budget exceeded. Please go to Profile > Universal Key > Add Balance.")
+        raise
+
     try:
         return _parse_json_response(response)
     except json.JSONDecodeError:

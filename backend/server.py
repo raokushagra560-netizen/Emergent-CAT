@@ -203,7 +203,8 @@ async def generate_assessment_round(req: AssessmentGenerateRoundReq, user: dict 
 
     article = await generate_article(genre=genre, difficulty=3, word_limit=800, tone="Analytical")
     if "error" in article:
-        raise HTTPException(status_code=500, detail="Failed to generate article")
+        detail = article.get("error", "Failed to generate article")
+        raise HTTPException(status_code=503 if article.get("budget_error") else 500, detail=detail)
 
     round_data = {"round_number": req.round_number, "genre": genre, "article": article, "status": "reading"}
     await db.assessments.update_one(
@@ -274,7 +275,8 @@ async def generate_reading(req: ArticleGenerateReq, user: dict = Depends(get_cur
     word_limit = WORD_LIMITS.get(req.word_limit_level, 800)
     article = await generate_article(req.genre, req.difficulty, word_limit, req.tone, req.structure)
     if "error" in article:
-        raise HTTPException(status_code=500, detail="Failed to generate article")
+        detail = article.get("error", "Failed to generate article")
+        raise HTTPException(status_code=503 if article.get("budget_error") else 500, detail=detail)
 
     sid = f"read_{uuid.uuid4().hex[:12]}"
     await db.reading_sessions.insert_one({

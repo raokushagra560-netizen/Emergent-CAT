@@ -79,8 +79,10 @@ export default function ReadingPage() {
       setWordMeanings([]);
       setEvaluation(null);
       setCorrectAnswers(null);
-    } catch {
-      toast.error('Failed to generate article');
+    } catch (err) {
+      const detail = err?.response?.data?.detail || '';
+      if (detail.includes('budget')) toast.error(detail);
+      else toast.error('Failed to generate article. Please try again.');
       setPhase('settings');
     } finally {
       setLoading(false);
