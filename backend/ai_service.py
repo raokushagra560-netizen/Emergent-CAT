@@ -160,7 +160,4 @@ Provide entries for ALL listed words."""
                 } for w in words
             ]
         }
-```
-
----
 
