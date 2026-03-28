@@ -1,15 +1,16 @@
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 import os
 import json
 import uuid
 import random
 from pathlib import Path
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-EMERGENT_KEY = os.environ.get('EMERGENT_LLM_KEY')
+genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 CAT_GENRES = [
     "Philosophy & Abstract Reasoning",
@@ -47,9 +48,8 @@ DIFFICULTY_DESCRIPTIONS = {
 
 WORD_LIMITS = {1: 200, 2: 500, 3: 800, 4: 1200, 5: 2000}
 
-
-def _parse_json_response(response):
-    text = response.strip()
+def _parse_json_response(text):
+    text = text.strip()
     if text.startswith("```json"):
         text = text[7:]
     if text.startswith("```"):
@@ -57,7 +57,6 @@ def _parse_json_response(response):
     if text.endswith("```"):
         text = text[:-3]
     return json.loads(text.strip())
-
 
 async def generate_article(genre, difficulty=3, word_limit=800, tone="Analytical", structure="random"):
     if structure == "random" or not structure:
@@ -67,50 +66,32 @@ async def generate_article(genre, difficulty=3, word_limit=800, tone="Analytical
 
     difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(difficulty, DIFFICULTY_DESCRIPTIONS[3])
 
-    chat = LlmChat(
-        api_key=EMERGENT_KEY,
-        session_id=f"article-{uuid.uuid4().hex[:8]}",
-        system_message="You are an expert content creator for CAT exam reading comprehension passages. You create intellectually stimulating articles mirroring actual CAT 2017-2025 exam styles. Respond ONLY with valid JSON, no markdown."
-    ).with_model("openai", "gpt-5.2")
+    prompt = f"""You are an expert content creator for CAT exam reading comprehension passages. You create intellectually stimulating articles mirroring actual CAT 2017-2025 exam styles.
 
-    prompt = f"""Generate a CAT-style reading comprehension article.
-
+Generate a CAT-style reading comprehension article with these specifications:
 Genre: {genre}
 Difficulty: {difficulty}/5 - {difficulty_desc}
 Word Count: approximately {word_limit} words
 Tone: {tone}
 Structure: {structure}
-
 Style inspiration: Aeon essays, JSTOR articles, NatGeo History, LA Review of Books, academic editorials.
 
-Return ONLY valid JSON (no markdown fences):
+Return ONLY valid JSON, no markdown fences, no extra text:
 {{"title":"article title","content":"full article text with paragraphs separated by double newlines","word_count":{word_limit},"genre":"{genre}","difficulty":{difficulty},"tone":"{tone}","structure_used":"{structure}","correct_what":"2-3 sentence summary of what article is about","correct_why":"2-3 sentence explanation of author purpose","correct_structure":"paragraph-by-paragraph breakdown like Para 1: Introduction... Para 2: Evidence...","difficult_words":["word1","word2","word3","word4","word5","word6"]}}"""
 
     try:
-        response = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        error_msg = str(e)
-        if "budget" in error_msg.lower() or "exceeded" in error_msg.lower() or "cost" in error_msg.lower():
-            return {"error": "AI budget exceeded. Please go to Profile > Universal Key > Add Balance to continue.", "budget_error": True}
-        return {"error": f"AI service error: {error_msg[:200]}"}
-
-    try:
-        return _parse_json_response(response)
+        response = model.generate_content(prompt)
+        return _parse_json_response(response.text)
     except json.JSONDecodeError:
-        return {"error": "Failed to parse article response", "raw": response[:300]}
-
+        return {"error": "Failed to parse article response"}
+    except Exception as e:
+        return {"error": f"AI service error: {str(e)[:200]}"}
 
 async def evaluate_answers(article_content, correct_what, correct_why, correct_structure,
                            user_what, user_why, user_structure, reading_time_seconds, word_count):
     reading_wpm = (word_count / reading_time_seconds) * 60 if reading_time_seconds > 0 else 0
 
-    chat = LlmChat(
-        api_key=EMERGENT_KEY,
-        session_id=f"eval-{uuid.uuid4().hex[:8]}",
-        system_message="You are a CAT exam evaluator scoring reading comprehension. Respond ONLY with valid JSON, no markdown."
-    ).with_model("openai", "gpt-5.2")
-
-    prompt = f"""Evaluate reading comprehension answers.
+    prompt = f"""You are a CAT exam evaluator scoring reading comprehension answers.
 
 ARTICLE EXCERPT: {article_content[:1500]}
 
@@ -132,23 +113,19 @@ Scoring criteria:
 - Why accuracy (0-25)
 - Structure accuracy (0-20)
 
-Return ONLY valid JSON:
-{{"reading_speed_score":0,"what_score":0,"why_score":0,"structure_score":0,"total_score":0,"reading_speed_feedback":"brief","what_feedback":"brief","why_feedback":"brief","structure_feedback":"brief","overall_feedback":"2-3 sentence assessment","recommended_difficulty":3}}"""
+Return ONLY valid JSON, no markdown, no extra text:
+{{"reading_speed_score":0,"what_score":0,"why_score":0,"structure_score":0,"total_score":0,"reading_speed_feedback":"brief feedback","what_feedback":"brief feedback","why_feedback":"brief feedback","structure_feedback":"brief feedback","overall_feedback":"2-3 sentence assessment","recommended_difficulty":3}}"""
 
     try:
-        response = await chat.send_message(UserMessage(text=prompt))
+        response = model.generate_content(prompt)
+        return _parse_json_response(response.text)
     except Exception as e:
-        error_msg = str(e)
-        if "budget" in error_msg.lower() or "exceeded" in error_msg.lower():
-            raise Exception("AI budget exceeded. Please go to Profile > Universal Key > Add Balance.")
-        raise
-
-    try:
-        return _parse_json_response(response)
-    except json.JSONDecodeError:
         return {
-            "reading_speed_score": 15, "what_score": 12, "why_score": 12,
-            "structure_score": 10, "total_score": 49,
+            "reading_speed_score": 15,
+            "what_score": 12,
+            "why_score": 12,
+            "structure_score": 10,
+            "total_score": 49,
             "reading_speed_feedback": "Could not evaluate precisely",
             "what_feedback": "Could not evaluate precisely",
             "why_feedback": "Could not evaluate precisely",
@@ -157,33 +134,33 @@ Return ONLY valid JSON:
             "recommended_difficulty": 3
         }
 
-
 async def get_word_meanings(words, article_context):
-    chat = LlmChat(
-        api_key=EMERGENT_KEY,
-        session_id=f"vocab-{uuid.uuid4().hex[:8]}",
-        system_message="You are a vocabulary expert helping CAT aspirants. Respond ONLY with valid JSON, no markdown."
-    ).with_model("openai", "gpt-5.2")
+    prompt = f"""You are a vocabulary expert helping CAT aspirants understand difficult words.
 
-    prompt = f"""For these words from a reading passage, provide vocabulary help.
-
-Words: {", ".join(words)}
+Words to explain: {", ".join(words)}
 Article context: {article_context[:1500]}
 
-Return ONLY valid JSON:
-{{"words":[{{"word":"the word","meaning":"clear concise definition","article_sentence":"exact sentence from the passage where word appears","example_sentence":"a different example sentence","memory_trick":"clever mnemonic or association to remember meaning"}}]}}
+Return ONLY valid JSON, no markdown, no extra text:
+{{"words":[{{"word":"the word","meaning":"clear concise definition","article_sentence":"exact sentence from the passage where word appears","example_sentence":"a different example sentence using the word","memory_trick":"clever mnemonic or association to remember the meaning"}}]}}
 
 Provide entries for ALL listed words."""
 
     try:
-        response = await chat.send_message(UserMessage(text=prompt))
+        response = model.generate_content(prompt)
+        return _parse_json_response(response.text)
     except Exception as e:
-        error_msg = str(e)
-        if "budget" in error_msg.lower() or "exceeded" in error_msg.lower():
-            raise Exception("AI budget exceeded. Please go to Profile > Universal Key > Add Balance.")
-        raise
+        return {
+            "words": [
+                {
+                    "word": w,
+                    "meaning": "Unable to fetch meaning at this time",
+                    "article_sentence": "",
+                    "example_sentence": "",
+                    "memory_trick": ""
+                } for w in words
+            ]
+        }
+```
 
-    try:
-        return _parse_json_response(response)
-    except json.JSONDecodeError:
-        return {"words": [{"word": w, "meaning": "Unable to fetch meaning", "article_sentence": "", "example_sentence": "", "memory_trick": ""} for w in words]}
+---
+
