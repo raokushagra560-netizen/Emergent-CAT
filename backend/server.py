@@ -2,10 +2,10 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depend
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from passlib.context import CryptContext
 import os
 import logging
 import uuid
-import httpx
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -27,9 +27,19 @@ from ai_service import (
 )
 
 logger = logging.getLogger(__name__)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # --- Models ---
+class LoginReq(BaseModel):
+    email: str
+    password: str
+
+class RegisterReq(BaseModel):
+    email: str
+    password: str
+    name: str
+
 class AssessmentStartReq(BaseModel):
     strongest_genre: str
     intermediate_genre: str
@@ -113,56 +123,49 @@ async def get_current_user(request: Request) -> dict:
 
 
 # --- Auth Routes ---
-@api_router.post("/auth/session")
-async def create_session(request: Request, response: Response):
-    body = await request.json()
-    session_id = body.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
-
-    async with httpx.AsyncClient() as http:
-        auth_resp = await http.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id}
-        )
-    if auth_resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid session")
-
-    data = auth_resp.json()
-    email, name, picture = data["email"], data["name"], data.get("picture", "")
-    session_token = data["session_token"]
-
-    existing = await db.users.find_one({"email": email}, {"_id": 0})
+@api_router.post("/auth/register")
+async def register(req: RegisterReq, response: Response):
+    existing = await db.users.find_one({"email": req.email})
     if existing:
-        user_id = existing["user_id"]
-        await db.users.update_one({"email": email}, {"$set": {"name": name, "picture": picture}})
-    else:
-        user_id = f"user_{uuid.uuid4().hex[:12]}"
-        await db.users.insert_one({
-            "user_id": user_id, "email": email, "name": name, "picture": picture,
-            "assessment_completed": False, "difficulty_level": 3,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        })
-
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    hashed = pwd_context.hash(req.password)
+    await db.users.insert_one({
+        "user_id": user_id, "email": req.email, "name": req.name,
+        "picture": "", "password": hashed,
+        "assessment_completed": False, "difficulty_level": 3,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    session_token = uuid.uuid4().hex
     await db.user_sessions.insert_one({
         "user_id": user_id, "session_token": session_token,
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat()
     })
-
-    response.set_cookie(
-        key="session_token", value=session_token, httponly=True,
-        secure=True, samesite="none", path="/", max_age=7 * 24 * 60 * 60
-    )
-
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    response.set_cookie(key="session_token", value=session_token, httponly=True,
+        secure=True, samesite="none", path="/", max_age=7*24*60*60)
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
     return user
 
+@api_router.post("/auth/login")
+async def login(req: LoginReq, response: Response):
+    user = await db.users.find_one({"email": req.email})
+    if not user or not pwd_context.verify(req.password, user.get("password", "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    session_token = uuid.uuid4().hex
+    await db.user_sessions.insert_one({
+        "user_id": user["user_id"], "session_token": session_token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    response.set_cookie(key="session_token", value=session_token, httponly=True,
+        secure=True, samesite="none", path="/", max_age=7*24*60*60)
+    user_data = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password": 0})
+    return user_data
 
 @api_router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)):
     return user
-
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
@@ -204,13 +207,12 @@ async def generate_assessment_round(req: AssessmentGenerateRoundReq, user: dict 
     article = await generate_article(genre=genre, difficulty=3, word_limit=800, tone="Analytical")
     if "error" in article:
         detail = article.get("error", "Failed to generate article")
-        raise HTTPException(status_code=503 if article.get("budget_error") else 500, detail=detail)
+        raise HTTPException(status_code=500, detail=detail)
 
     round_data = {"round_number": req.round_number, "genre": genre, "article": article, "status": "reading"}
     await db.assessments.update_one(
         {"assessment_id": req.assessment_id}, {"$push": {"rounds": round_data}}
     )
-
     return {"assessment_id": req.assessment_id, "round_number": req.round_number, "genre": genre, "article": article}
 
 
@@ -247,7 +249,6 @@ async def submit_assessment_round(req: AssessmentSubmitReq, user: dict = Depends
         scores = [r["evaluation"]["total_score"] for r in updated["rounds"] if "evaluation" in r]
         overall_score = sum(scores) / len(scores) if scores else 0
         difficulty = 4 if overall_score >= 80 else 3 if overall_score >= 60 else 2 if overall_score >= 40 else 1
-
         await db.assessments.update_one({"assessment_id": req.assessment_id}, {"$set": {
             "overall_score": overall_score, "status": "completed",
             "completed_at": datetime.now(timezone.utc).isoformat()
@@ -275,8 +276,7 @@ async def generate_reading(req: ArticleGenerateReq, user: dict = Depends(get_cur
     word_limit = WORD_LIMITS.get(req.word_limit_level, 800)
     article = await generate_article(req.genre, req.difficulty, word_limit, req.tone, req.structure)
     if "error" in article:
-        detail = article.get("error", "Failed to generate article")
-        raise HTTPException(status_code=503 if article.get("budget_error") else 500, detail=detail)
+        raise HTTPException(status_code=500, detail=article.get("error", "Failed to generate article"))
 
     sid = f"read_{uuid.uuid4().hex[:12]}"
     await db.reading_sessions.insert_one({
